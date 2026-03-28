@@ -1,0 +1,86 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Choose Configuration Method",
+        "description": "How would you like to configure your Tile device?",
+        "data": {
+          "config_method": "Configuration Method"
+        }
+      },
+      "hub": {
+        "title": "Tile Account Hub",
+        "description": "Enter your Tile account credentials to create a hub for adding multiple devices.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "manual": {
+        "title": "Manual Configuration",
+        "description": "Manually enter your Tile device information.",
+        "data": {
+          "name": "Device Name",
+          "mac_address": "MAC Address",
+          "auth_key": "Authentication Key"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Tile servers",
+      "invalid_auth": "Invalid credentials or device information",
+      "invalid_mac": "Invalid MAC address format",
+      "no_devices": "No Tile devices found on your account",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "no_devices": "No devices found on your Tile account"
+    }
+  },
+  "config_subentries": {
+    "device": {
+      "title": "Add Tile Device",
+      "step": {
+        "user": {
+          "title": "Add Tile Device",
+          "description": "Choose how to add your Tile device.",
+          "data": {
+            "add_method": "Method"
+          }
+        },
+        "discover": {
+          "title": "Discovered Tiles",
+          "description": "The following Tile devices were found nearby and matched to your account. Already-configured devices are excluded.",
+          "data": {
+            "discovered_device": "Tile Device"
+          }
+        },
+        "manual": {
+          "title": "Manual Device Entry",
+          "description": "Enter the Bluetooth MAC address of your Tile device.",
+          "data": {
+            "ble_mac_address": "Bluetooth MAC Address"
+          }
+        },
+        "select_tile": {
+          "title": "Select Tile Device",
+          "description": "Choose which Tile device corresponds to your MAC address.",
+          "data": {
+            "tile_id": "Tile Device"
+          }
+        }
+      },
+      "error": {
+        "invalid_mac": "Invalid MAC address format",
+        "no_devices": "No devices available from hub",
+        "unknown": "Unexpected error occurred"
+      },
+      "abort": {
+        "no_devices": "No Tile devices found on your account",
+        "no_tiles_discovered": "No Tile devices were found nearby. Make sure your Tiles are powered on and within Bluetooth range, then try again. You can also use manual entry.",
+        "device_not_found": "Selected device is no longer available"
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+# Archive of old implementations and test scripts (may contain credentials)
+archive/
+
+# Python virtual environment
+tile_bell_env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
