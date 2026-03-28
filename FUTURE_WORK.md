@@ -71,15 +71,7 @@ The battery sensor reads `metadata.battery_state` from the Tile cloud API. It's 
 
 ---
 
-## 5. Older Tile Models Without TILE_ID Characteristic
-
-**Status**: MAC-based fallback implemented, untested on older hardware
-
-The comment at https://github.com/bachya/pytile/issues/49#issuecomment-2717862142 describes three generations of Tile MAC handling. Auto-discovery now tries MAC-based matching first (covers older tiles and PrivateID v1), then falls back to connecting and reading TILE_ID_CHAR (covers PrivateID v2). However, the MAC-based matching hasn't been tested on actual older Tile hardware. If older tiles also lack the "Tile" name in BLE advertisements, they won't be found at all.
-
----
-
-## 6. macOS BLE MAC Masking
+## 5. macOS BLE MAC Masking
 
 **Status**: Known limitation, no workaround
 
