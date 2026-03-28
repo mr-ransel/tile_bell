@@ -11,7 +11,7 @@ This integration builds upon the reverse engineering work done in [jeretile](htt
 - **Ring button** -- Ring any Tile device on demand from HA
 - **Volume control** -- Select Low, Medium, High, or Auto volume
 - **Duration control** -- Set ring duration from 1-60 seconds
-- **Battery sensor** -- Battery percentage from Tile cloud API (hub mode only)
+- **Battery sensor** (experimental) -- Battery percentage from Tile cloud API (hub mode only, disabled by default)
 - **Auto-discovery** -- Scan for nearby Tiles and auto-match them to your cloud account
 - **Manual fallback** -- Enter BLE MAC and auth key directly if auto-discovery doesn't work
 - **Device merging** -- Tile Bell entities merge with the native HA Tile integration's devices
@@ -66,7 +66,7 @@ Each configured Tile device gets these entities:
 | Ring | Button | Press to ring the Tile |
 | Ring Volume | Select | Low, Medium, High, or Auto |
 | Ring Duration | Number | 1-60 seconds (default 30) |
-| Battery | Sensor | Battery percentage (hub mode only) |
+| Battery | Sensor | Battery percentage (hub mode only, experimental, disabled by default) |
 
 ## Tips and Troubleshooting
 
@@ -81,15 +81,19 @@ If your Tiles don't show up:
 - Use a BLE scanner app like **nRF Connect** on your phone to verify the Tile is advertising and note its MAC address
 - If you can see the Tile in nRF Connect but auto-discovery still fails, use **Enter MAC Address Manually** instead and provide the MAC address from nRF Connect
 
+### Ring Is Slow
+
+Ringing requires establishing a new BLE connection, authenticating, and sending the command. Tiles can be slow to connect -- ring times of up to 15 seconds are not unusual. This is a limitation of the Tile BLE protocol, not the integration.
+
 ### Ring Not Working
 
 - The Tile must be within Bluetooth range at the time you press the Ring button
 - If the ring is very quiet, the Tile's battery may be nearly dead -- the speaker gets weak before the battery fully dies
 - Check HA logs with debug logging enabled (see below)
 
-### Battery Sensor Shows Unknown
+### Battery Sensor (Experimental)
 
-Battery data comes from the Tile cloud API and is only available in hub mode. It refreshes every 24 hours to avoid rate limiting. The sensor won't appear for manually-configured devices since there's no cloud data source.
+The battery sensor is disabled by default. You can enable it from the entity's settings in HA. Battery data comes from the Tile cloud API and is only available in hub mode. It refreshes every 24 hours to avoid rate limiting. The accuracy of this data is uncertain -- Tile may estimate battery based on time since replacement rather than actual measurement. The sensor won't appear for manually-configured devices since there's no cloud data source.
 
 ### Device Merging with Native Tile Integration
 

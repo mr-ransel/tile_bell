@@ -52,6 +52,7 @@ class TileBatteryLevelSensor(SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_icon = "mdi:battery-bluetooth"
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, config: dict[str, Any], device_data: dict[str, Any]) -> None:
         """Initialize the battery sensor."""
