@@ -110,39 +110,27 @@ logger:
 
 ## Backing Up Auth Keys (Future-Proofing)
 
-If Tile ever discontinues their cloud service, you can still use your Tiles as ringers by providing the auth keys manually. Use this script to extract and save your auth keys while the cloud API is still available:
+If Tile ever discontinues their cloud service, you can still use your Tiles as ringers by providing the auth keys manually. Use the backup script to extract and save your auth keys while the cloud API is still available:
 
-```python
-import asyncio
-import json
-from aiohttp import ClientSession
-from pytile import async_login
-
-async def main():
-    async with ClientSession() as session:
-        api = await async_login("your_email@example.com", "your_password", session)
-        tiles = await api.async_get_tiles()
-
-        backup = {}
-        for tile in tiles.values():
-            if str(tile.uuid).startswith("p!"):
-                continue  # Skip phone entries
-            backup[tile.name] = {
-                "uuid": tile.uuid,
-                "auth_key": tile._tile_data["result"]["auth_key"],
-                "firmware": tile.firmware_version,
-                "hardware": tile.hardware_version,
-            }
-            print(f"{tile.name}: uuid={tile.uuid}, auth_key=<saved>")
-
-        with open("tile_backup.json", "w") as f:
-            json.dump(backup, f, indent=2)
-        print(f"\nSaved {len(backup)} device(s) to tile_backup.json")
-
-asyncio.run(main())
+```bash
+pip install pytile aiohttp
+python scripts/backup_auth_keys.py
 ```
 
-Install dependencies with `pip install pytile aiohttp`, then run the script. Store `tile_backup.json` somewhere safe. With the BLE MAC address (from nRF Connect or auto-discovery) and the auth key from the backup, you can configure Tile Bell in manual mode without any cloud dependency.
+This saves your device credentials to `tile_backup.json`. Store it somewhere safe. With the BLE MAC address (from nRF Connect or auto-discovery) and the auth key from the backup, you can configure Tile Bell in manual mode without any cloud dependency.
+
+## Developer / Debug Scripts
+
+The `scripts/` directory contains standalone tools for debugging and development. These run outside of Home Assistant using `bleak` and `pytile` directly.
+
+| Script | Description |
+|--------|-------------|
+| `backup_auth_keys.py` | Export auth keys from Tile cloud to a JSON file |
+| `scan_ble_tiles.py` | Scan for nearby Tiles and dump all BLE characteristics (no cloud credentials needed) |
+| `match_ble_to_cloud.py` | Scan BLE + fetch cloud data, then match devices by Tile ID (same logic as auto-discover) |
+| `dump_cloud_data.py` | Dump all cloud API fields for each Tile, including battery and metadata |
+
+Install dependencies: `pip install pytile aiohttp bleak`
 
 ## How It Works
 
