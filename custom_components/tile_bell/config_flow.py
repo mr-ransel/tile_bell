@@ -226,12 +226,35 @@ class ConfigFlow(HAConfigFlow, domain=DOMAIN):
         )
 
 
+def _try_mac_match(ble_mac: str, cloud_tiles: dict[str, Any]) -> str | None:
+    """Try to match a BLE MAC to a cloud tile without connecting.
+
+    Handles older Tile models where the cloud tile ID contains the MAC:
+    - Older tiles: first 12 chars of tile ID == BLE MAC (no colons)
+    - PrivateID v1: chars 3-12 of tile ID == chars 3-12 of BLE MAC
+    """
+    mac_clean = ble_mac.replace(":", "").replace("-", "").lower()
+    for cloud_id in cloud_tiles:
+        cid = cloud_id.lower()
+        # Older tiles: tile ID starts with the full MAC
+        if cid[:12] == mac_clean:
+            return cloud_id
+        # PrivateID v1: first 2 chars spoofed, chars 3-12 match
+        if len(cid) >= 12 and len(mac_clean) >= 12 and cid[2:12] == mac_clean[2:12]:
+            return cloud_id
+    return None
+
+
 async def _async_discover_tiles(
     hass: HomeAssistant,
     cloud_tiles: dict[str, Any],
     existing_macs: set[str],
 ) -> list[dict[str, Any]]:
     """Scan for nearby Tile BLE devices and match them to cloud accounts.
+
+    Uses a tiered matching strategy:
+    1. Try MAC-based matching for older Tile models (no connection needed)
+    2. Connect and read TILE_ID characteristic for PrivateID v2 / newer models
 
     Filters out devices whose BLE MAC is already configured.
     Returns a list of dicts with keys: ble_mac, tile_id, tile_name, api_mac, auth_key, rssi.
@@ -253,10 +276,30 @@ async def _async_discover_tiles(
         return []
 
     matched = []
+    need_connection = []
+
+    # Pass 1: try MAC-based matching (instant, no BLE connection)
     for service_info in tile_candidates:
         ble_mac = service_info.address.upper()
+        cloud_id = _try_mac_match(ble_mac, cloud_tiles)
+        if cloud_id:
+            cloud_data = cloud_tiles[cloud_id]
+            matched.append({
+                "ble_mac": ble_mac,
+                "tile_id": cloud_id,
+                "tile_name": cloud_data["name"],
+                "api_mac": cloud_data["api_mac"],
+                "auth_key": cloud_data["auth_key"],
+                "rssi": service_info.rssi,
+            })
+            _LOGGER.debug("MAC-matched %s to %s", ble_mac, cloud_data["name"])
+        else:
+            need_connection.append(service_info)
+
+    # Pass 2: connect to remaining candidates and read TILE_ID characteristic
+    for service_info in need_connection:
+        ble_mac = service_info.address.upper()
         try:
-            # Connect and read the TILE_ID characteristic
             client = await establish_connection(
                 BleakClient, service_info.device, service_info.name, timeout=15.0
             )
@@ -269,7 +312,6 @@ async def _async_discover_tiles(
             _LOGGER.debug("Could not read TILE_ID from %s: %s", ble_mac, e)
             continue
 
-        # Match against cloud Tile UUIDs
         for cloud_id, cloud_data in cloud_tiles.items():
             if cloud_id.lower() == ble_tile_id.lower():
                 matched.append({
@@ -280,6 +322,7 @@ async def _async_discover_tiles(
                     "auth_key": cloud_data["auth_key"],
                     "rssi": service_info.rssi,
                 })
+                _LOGGER.debug("TILE_ID-matched %s to %s", ble_mac, cloud_data["name"])
                 break
 
     return matched
