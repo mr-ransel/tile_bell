@@ -232,6 +232,9 @@ def _try_mac_match(ble_mac: str, cloud_tiles: dict[str, Any]) -> str | None:
     Handles older Tile models where the cloud tile ID contains the MAC:
     - Older tiles: first 12 chars of tile ID == BLE MAC (no colons)
     - PrivateID v1: chars 3-12 of tile ID == chars 3-12 of BLE MAC
+    - PrivateID v2 (newest): tile ID is unrelated to MAC, requires BLE connection
+
+    See: https://github.com/bachya/pytile/issues/49#issuecomment-2717862142
     """
     mac_clean = ble_mac.replace(":", "").replace("-", "").lower()
     for cloud_id in cloud_tiles:
