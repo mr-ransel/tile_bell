@@ -4,7 +4,7 @@ Ring your Tile Bluetooth trackers directly from Home Assistant via BLE -- no Til
 
 ## Credit
 
-This integration builds upon the reverse engineering work done in [jeretile](https://github.com/jeremad/jeretile) by Jeremy Adam and [node-tile](https://github.com/nickoala/node-tile) by nickoala. The Bluetooth protocol implementation is adapted from their work.
+This integration builds upon the reverse engineering work done in [jeretile](https://github.com/jeremad/jeretile) by Jeremy Adam and [node-tile](https://github.com/lesleyxyz/node-tile) by lesleyxyz. The Bluetooth protocol implementation is adapted from their work.
 
 ## Features
 
@@ -158,7 +158,7 @@ Install dependencies with `pip install pytile aiohttp`, then run the script. Sto
 ## Acknowledgments
 
 - [Jeremy Adam](https://github.com/jeremad) for [jeretile](https://github.com/jeremad/jeretile)
-- [nickoala](https://github.com/nickoala) for [node-tile](https://github.com/nickoala/node-tile)
+- [lesleyxyz](https://github.com/lesleyxyz) for [node-tile](https://github.com/lesleyxyz/node-tile)
 - The `pytile` library maintainers
 - The Home Assistant community
 
