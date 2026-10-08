@@ -17,14 +17,17 @@ Usage:
 
 import asyncio
 import sys
-from getpass import getpass
 
 from aiohttp import ClientSession
 import pytile
 from bleak import BleakScanner, BleakClient
 
+from tile_env import get_credentials
+
 TILE_ID_CHAR_UUID = "9d410007-35d6-f4dd-ba60-e7bd8dc491c0"
-SCAN_DURATION = 15
+# Tile advertised service UUIDs (see node-tile AbstractTileService.ts)
+TILE_SERVICE_UUIDS = {"0000feed-0000-1000-8000-00805f9b34fb", "0000feec-0000-1000-8000-00805f9b34fb"}
+SCAN_DURATION = 30
 
 
 async def get_cloud_tiles(email: str, password: str) -> dict:
@@ -45,46 +48,56 @@ async def get_cloud_tiles(email: str, password: str) -> dict:
     return result
 
 
+def is_tile(name: str, service_uuids: list[str]) -> bool:
+    """Check if a BLE device is a Tile by service UUID or name."""
+    if set(str(u).lower() for u in service_uuids) & TILE_SERVICE_UUIDS:
+        return True
+    return "tile" in name.lower()
+
+
 async def scan_for_tiles() -> list[dict]:
-    """Scan for BLE devices named 'Tile'."""
-    print(f"Scanning for Tile BLE devices for {SCAN_DURATION}s...")
-    tiles = []
+    """Scan for Tile BLE devices by service UUID.
+
+    Uses a long scan window (60s) because Tiles advertise infrequently (~30s intervals).
+    Identifies Tiles by their advertised service UUIDs (feed/feec), not just by name.
+    """
+    print(f"Scanning for Tile BLE devices for {SCAN_DURATION}s (Tiles advertise infrequently)...")
+    tiles = {}
     devices = await BleakScanner.discover(timeout=SCAN_DURATION, return_adv=True)
     for d, adv in devices.values():
         name = d.name or adv.local_name or ""
-        if "tile" in name.lower():
-            tiles.append({
+        if is_tile(name, adv.service_uuids or []):
+            tiles[d.address] = {
                 "address": d.address,
                 "name": name,
                 "rssi": adv.rssi,
-            })
-    return tiles
+            }
+    return list(tiles.values())
 
 
 async def read_tile_id(ble_address: str) -> str | None:
-    """Connect to a Tile and read TILE_ID_CHAR."""
-    try:
-        print(f"  Connecting to {ble_address}...")
-        async with BleakClient(ble_address, timeout=15.0) as client:
-            data = await client.read_gatt_char(TILE_ID_CHAR_UUID)
-            tile_id = data.hex()
-            print(f"  TILE_ID: {tile_id}")
-            return tile_id
-    except Exception as e:
-        print(f"  Failed: {e}")
-        return None
+    """Connect to a Tile and read TILE_ID_CHAR.
+
+    Retries up to 3 times since Tiles are only briefly connectable.
+    """
+    for attempt in range(1, 4):
+        try:
+            print(f"  Connecting to {ble_address} (attempt {attempt}/3)...")
+            async with BleakClient(ble_address, timeout=30.0) as client:
+                data = await client.read_gatt_char(TILE_ID_CHAR_UUID)
+                tile_id = data.hex()
+                print(f"  TILE_ID: {tile_id}")
+                return tile_id
+        except Exception as e:
+            print(f"  Attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                print(f"  Retrying in 5s...")
+                await asyncio.sleep(5)
+    return None
 
 
 async def main():
-    email = input("Tile account email: ").strip()
-    if not email:
-        print("Error: email is required")
-        sys.exit(1)
-
-    password = getpass("Tile account password: ")
-    if not password:
-        print("Error: password is required")
-        sys.exit(1)
+    email, password = get_credentials()
 
     # Step 1: Cloud data
     print("\n=== Fetching cloud tile data ===")

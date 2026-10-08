@@ -2,7 +2,13 @@
 
 DOMAIN = "tile_bell"
 
-# Tile Bluetooth UUIDs
+# Tile Bluetooth service UUIDs used for advertisement identification
+# See: node-tile/src/services/AbstractTileService.ts
+TILE_FEED_SERVICE_UUID = "0000feed-0000-1000-8000-00805f9b34fb"
+TILE_FEEC_SERVICE_UUID = "0000feec-0000-1000-8000-00805f9b34fb"
+TILE_ADVERTISED_UUIDS = {TILE_FEED_SERVICE_UUID, TILE_FEEC_SERVICE_UUID}
+
+# Tile Bluetooth characteristic UUIDs
 TILE_COMMAND_UUID = "9d410018-35d6-f4dd-ba60-e7bd8dc491c0"
 TILE_RESPONSE_UUID = "9d410019-35d6-f4dd-ba60-e7bd8dc491c0"
 TILE_ID_CHAR_UUID = "9d410007-35d6-f4dd-ba60-e7bd8dc491c0"
@@ -26,4 +32,4 @@ VOLUME_OPTIONS = {
 
 # NOTE: CMD_STOP_RING removed - protocol doesn't support stop, only duration-based ringing
 # NOTE: Standard BLE Battery Level (00002a19) is NOT exposed by Tile devices.
-# Battery data comes from the Tile cloud API metadata.battery_state field.
+# Cloud API has battery fields but they appear unreliable. See FUTURE_WORK.md.

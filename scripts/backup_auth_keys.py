@@ -12,22 +12,15 @@ Usage:
 import asyncio
 import json
 import sys
-from getpass import getpass
 
 from aiohttp import ClientSession
 import pytile
 
+from tile_env import get_credentials
+
 
 async def main():
-    email = input("Tile account email: ").strip()
-    if not email:
-        print("Error: email is required")
-        sys.exit(1)
-
-    password = getpass("Tile account password: ")
-    if not password:
-        print("Error: password is required")
-        sys.exit(1)
+    email, password = get_credentials()
 
     print(f"\nConnecting to Tile API...")
 

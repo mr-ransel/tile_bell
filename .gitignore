@@ -18,5 +18,9 @@ __pycache__/
 *.swp
 *.swo
 
+# Environment files (may contain credentials)
+.env
+scripts/.env
+
 # Claude Code
 .claude/

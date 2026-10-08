@@ -2,22 +2,18 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN
 
-CLOUD_REFRESH_INTERVAL = timedelta(hours=24)
-
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.NUMBER, Platform.SELECT, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.NUMBER, Platform.SELECT]
 
 
 def _setup_ble_tracking(
@@ -61,54 +57,6 @@ def _setup_ble_tracking(
         _LOGGER.debug("Found existing service info for %s", mac_address)
         device_data["available"] = True
         device_data["service_info"] = existing
-
-
-async def _async_refresh_cloud_battery(
-    hass: HomeAssistant, hub_data: dict
-) -> None:
-    """Fetch battery levels from Tile cloud API and update device data."""
-    try:
-        import pytile
-        from aiohttp import ClientSession
-
-        async with ClientSession() as session:
-            api = await pytile.async_login(
-                hub_data["email"], hub_data["password"], session
-            )
-            tiles = await api.async_get_tiles()
-
-        if not tiles:
-            return
-
-        # Build a lookup from Tile UUID to battery percentage via metadata
-        cloud_battery = {}
-        for tile in tiles.values():
-            tile_uuid = str(tile.uuid).upper()
-            result = tile._tile_data.get("result", {})
-            metadata = result.get("metadata") or {}
-            battery_state = metadata.get("battery_state")
-            if battery_state is not None:
-                try:
-                    cloud_battery[tile_uuid] = int(battery_state)
-                except (ValueError, TypeError):
-                    pass
-
-        # Update device_data for any subentry devices that have a matching api_mac
-        for device_data in hub_data.get("devices", {}).values():
-            api_mac = device_data["config"].get("api_mac", "").upper()
-            if api_mac in cloud_battery:
-                device_data["battery_level"] = cloud_battery[api_mac]
-                mac = device_data["mac_address"]
-                _LOGGER.debug(
-                    "Cloud battery update for %s: %d%%",
-                    mac, cloud_battery[api_mac],
-                )
-                async_dispatcher_send(
-                    hass, f"{DOMAIN}_battery_update_{mac}"
-                )
-
-    except Exception as e:
-        _LOGGER.warning("Failed to refresh battery from Tile cloud: %s", e)
 
 
 async def _async_hub_entry_updated(
@@ -157,19 +105,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(
             entry.add_update_listener(_async_hub_entry_updated)
         )
-
-        # Seed battery levels from cloud on startup, then refresh every 24h
-        if hub_data["devices"]:
-            await _async_refresh_cloud_battery(hass, hub_data)
-
-            async def _periodic_cloud_refresh(_now):
-                await _async_refresh_cloud_battery(hass, hub_data)
-
-            entry.async_on_unload(
-                async_track_time_interval(
-                    hass, _periodic_cloud_refresh, CLOUD_REFRESH_INTERVAL
-                )
-            )
 
         _LOGGER.info("Set up Tile hub for %s", entry.data["email"])
         return True

@@ -36,31 +36,28 @@ class TileDevice:
     async def connect(self) -> bool:
         """Connect to the Tile device using Home Assistant's Bluetooth integration."""
         try:
-            # Get the BLE device from Home Assistant's Bluetooth integration
             ble_device = bluetooth.async_ble_device_from_address(
                 self.hass, self.mac_address, connectable=True
             )
-            
+
             if not ble_device:
                 _LOGGER.error("Could not find Bluetooth device %s", self.mac_address)
-                # Try to trigger rediscovery
                 await bluetooth.async_rediscover_address(self.hass, self.mac_address)
                 return False
 
-            # Use bleak-retry-connector for reliable connection with longer timeout
             self.client = await establish_connection(
                 BleakClient,
                 ble_device,
                 self.mac_address,
                 max_attempts=3,
                 disconnected_callback=self._on_disconnect,
-                timeout=20.0,  # Increased timeout for Tile devices
+                timeout=30.0,
             )
-            
+
             self.connected = True
             _LOGGER.info("Connected to Tile device %s (%s)", self.name, self.mac_address)
             return True
-            
+
         except Exception as e:
             _LOGGER.error("Failed to connect to %s (%s): %s", self.name, self.mac_address, e)
             return False
