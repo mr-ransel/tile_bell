@@ -1,4 +1,5 @@
 {
   "name": "Tile Bell",
-  "homeassistant": "2025.3.0"
+  "homeassistant": "2025.3.0",
+  "render_readme": true
 }
