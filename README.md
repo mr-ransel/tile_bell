@@ -11,7 +11,6 @@ This integration builds upon the reverse engineering work done in [jeretile](htt
 - **Ring button** -- Ring any Tile device on demand from HA
 - **Volume control** -- Select Low, Medium, High, or Auto volume
 - **Duration control** -- Set ring duration from 1-60 seconds
-- **Battery sensor** (experimental) -- Battery percentage from Tile cloud API (hub mode only, disabled by default)
 - **Auto-discovery** -- Scan for nearby Tiles and auto-match them to your cloud account
 - **Manual fallback** -- Enter BLE MAC and auth key directly if auto-discovery doesn't work
 - **Device merging** -- Tile Bell entities merge with the native HA Tile integration's devices
@@ -38,7 +37,7 @@ This integration builds upon the reverse engineering work done in [jeretile](htt
 
 ### Option 1: Tile Account Hub (Recommended)
 
-This is the recommended setup. It connects to your Tile cloud account to retrieve device auth keys, enables auto-discovery of nearby Tiles, and provides battery level reporting.
+This is the recommended setup. It connects to your Tile cloud account to retrieve device auth keys and enables auto-discovery of nearby Tiles.
 
 1. Add the integration and choose **Tile Account Hub**
 2. Enter your Tile account email and password
@@ -55,7 +54,7 @@ For users who don't want to use cloud credentials, or for Tiles whose auth keys 
 1. Add the integration and choose **Manual MAC Address & Auth Key**
 2. Enter the device name, BLE MAC address, and auth key
 
-This mode does not provide battery level reporting or auto-discovery since those require cloud access.
+This mode does not provide auto-discovery since that requires cloud access.
 
 ## Entities
 
@@ -66,7 +65,6 @@ Each configured Tile device gets these entities:
 | Ring | Button | Press to ring the Tile |
 | Ring Volume | Select | Low, Medium, High, or Auto |
 | Ring Duration | Number | 1-60 seconds (default 30) |
-| Battery | Sensor | Battery percentage (hub mode only, experimental, disabled by default) |
 
 ## Tips and Troubleshooting
 
@@ -89,11 +87,8 @@ Ringing requires establishing a new BLE connection, authenticating, and sending 
 
 - The Tile must be within Bluetooth range at the time you press the Ring button
 - If the ring is very quiet, the Tile's battery may be nearly dead -- the speaker gets weak before the battery fully dies
+- **Newer Tile models may not be supported** -- Tile's newer hardware (e.g. ROYAL_ST1, hardware v24+) includes anti-third-party protections that prevent enabling BLE notifications via BlueZ. These tiles will discover and connect but fail when ringing. Older models (DIABLO, hardware v08) work fine. See FUTURE_WORK.md for details.
 - Check HA logs with debug logging enabled (see below)
-
-### Battery Sensor (Experimental)
-
-The battery sensor is disabled by default. You can enable it from the entity's settings in HA. Battery data comes from the Tile cloud API and is only available in hub mode. It refreshes every 24 hours to avoid rate limiting. The accuracy of this data is uncertain -- Tile may estimate battery based on time since replacement rather than actual measurement. The sensor won't appear for manually-configured devices since there's no cloud data source.
 
 ### Device Merging with Native Tile Integration
 
@@ -128,7 +123,7 @@ The `scripts/` directory contains standalone tools for debugging and development
 | `backup_auth_keys.py` | Export auth keys from Tile cloud to a JSON file |
 | `scan_ble_tiles.py` | Scan for nearby Tiles and dump all BLE characteristics (no cloud credentials needed) |
 | `match_ble_to_cloud.py` | Scan BLE + fetch cloud data, then match devices by Tile ID (same logic as auto-discover) |
-| `dump_cloud_data.py` | Dump all cloud API fields for each Tile, including battery and metadata |
+| `dump_cloud_data.py` | Dump all cloud API fields for each Tile, including metadata |
 
 Install dependencies: `pip install pytile aiohttp bleak`
 
@@ -138,7 +133,6 @@ Install dependencies: `pip install pytile aiohttp bleak`
 2. **Connection** -- Uses Home Assistant's Bluetooth integration and `bleak-retry-connector` for reliable BLE connections
 3. **Authentication** -- HMAC-SHA256 handshake with the Tile device over BLE
 4. **Ring** -- Sends the ring command with configurable volume and duration
-5. **Battery** -- Periodically fetches battery percentage from the Tile cloud API (every 24 hours)
 
 ## Requirements
 
@@ -156,4 +150,4 @@ Install dependencies: `pip install pytile aiohttp bleak`
 
 ## License
 
-MIT License -- see the LICENSE file for details.
+GPLv3 -- see the LICENSE file for details.
