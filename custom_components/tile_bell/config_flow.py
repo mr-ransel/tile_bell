@@ -1,11 +1,13 @@
 """Config flow for Tile Bell integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import bluetooth
+from homeassistant.components.bluetooth import BluetoothScanningMode
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow as HAConfigFlow,
@@ -16,7 +18,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, TILE_ID_CHAR_UUID
+from .const import DOMAIN, TILE_ADVERTISED_UUIDS, TILE_ID_CHAR_UUID
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -248,12 +250,45 @@ def _try_mac_match(ble_mac: str, cloud_tiles: dict[str, Any]) -> str | None:
     return None
 
 
+def _is_tile_device(service_info) -> bool:
+    """Check if a BLE service_info is a Tile device.
+
+    Matches on advertised service UUIDs (feed/feec) rather than device name,
+    since not all Tiles advertise with "Tile" in their name.
+    """
+    adv_uuids = set()
+    for uuid in (service_info.service_uuids or []):
+        adv_uuids.add(str(uuid).lower())
+    if adv_uuids & TILE_ADVERTISED_UUIDS:
+        return True
+    # Fallback: also match by name for any edge cases
+    name = service_info.name or ""
+    return "tile" in name.lower()
+
+
+def _collect_tile_candidates(
+    hass: HomeAssistant, existing_macs: set[str],
+) -> dict[str, Any]:
+    """Get Tile BLE candidates from HA's discovery cache, keyed by uppercase MAC."""
+    candidates = {}
+    for service_info in bluetooth.async_discovered_service_info(hass):
+        mac = service_info.address.upper()
+        if _is_tile_device(service_info) and mac not in existing_macs:
+            candidates[mac] = service_info
+    return candidates
+
+
 async def _async_discover_tiles(
     hass: HomeAssistant,
     cloud_tiles: dict[str, Any],
     existing_macs: set[str],
+    scan_duration: int = 30,
 ) -> list[dict[str, Any]]:
     """Scan for nearby Tile BLE devices and match them to cloud accounts.
+
+    Tiles advertise infrequently, so a single snapshot may miss devices.
+    This function actively scans for up to `scan_duration` seconds, collecting
+    candidates as they appear, then matches them against the cloud account.
 
     Uses a tiered matching strategy:
     1. Try MAC-based matching for older Tile models (no connection needed)
@@ -265,37 +300,56 @@ async def _async_discover_tiles(
     from bleak_retry_connector import establish_connection
     from bleak import BleakClient
 
-    # Get all currently discovered BLE devices from HA
-    discovered = bluetooth.async_discovered_service_info(hass)
+    # Collect candidates from cache + active scanning over scan_duration
+    candidates: dict[str, Any] = _collect_tile_candidates(hass, existing_macs)
+    _LOGGER.debug(
+        "Initial cache has %d Tile candidate(s), scanning for %ds...",
+        len(candidates), scan_duration,
+    )
 
-    # Filter to devices with "Tile" in their name, excluding already-configured MACs
-    tile_candidates = []
-    for service_info in discovered:
-        name = service_info.name or ""
-        if "tile" in name.lower() and service_info.address.upper() not in existing_macs:
-            tile_candidates.append(service_info)
+    scan_complete = asyncio.Event()
 
-    if not tile_candidates:
+    def _on_advertisement(service_info, _change):
+        mac = service_info.address.upper()
+        if _is_tile_device(service_info) and mac not in existing_macs and mac not in candidates:
+            candidates[mac] = service_info
+            _LOGGER.debug("Discovered new Tile candidate: %s (%s)", mac, service_info.name)
+
+    cancel_scan = bluetooth.async_register_callback(
+        hass, _on_advertisement, {}, BluetoothScanningMode.ACTIVE,
+    )
+
+    try:
+        # Wait for scan_duration, collecting advertisements as they arrive
+        try:
+            await asyncio.wait_for(scan_complete.wait(), timeout=scan_duration)
+        except asyncio.TimeoutError:
+            pass  # Expected — scan_complete is never set, we just wait the full duration
+    finally:
+        cancel_scan()
+
+    _LOGGER.debug("Scan complete, %d total candidate(s) found", len(candidates))
+
+    if not candidates:
         return []
 
+    # Pass 1: try MAC-based matching (instant, no BLE connection)
     matched = []
     need_connection = []
 
-    # Pass 1: try MAC-based matching (instant, no BLE connection)
-    for service_info in tile_candidates:
-        ble_mac = service_info.address.upper()
-        cloud_id = _try_mac_match(ble_mac, cloud_tiles)
+    for mac, service_info in candidates.items():
+        cloud_id = _try_mac_match(mac, cloud_tiles)
         if cloud_id:
             cloud_data = cloud_tiles[cloud_id]
             matched.append({
-                "ble_mac": ble_mac,
+                "ble_mac": mac,
                 "tile_id": cloud_id,
                 "tile_name": cloud_data["name"],
                 "api_mac": cloud_data["api_mac"],
                 "auth_key": cloud_data["auth_key"],
                 "rssi": service_info.rssi,
             })
-            _LOGGER.debug("MAC-matched %s to %s", ble_mac, cloud_data["name"])
+            _LOGGER.debug("MAC-matched %s to %s", mac, cloud_data["name"])
         else:
             need_connection.append(service_info)
 
@@ -338,12 +392,33 @@ class DeviceSubentryFlowHandler(ConfigSubentryFlow):
         """Initialize."""
         self.ble_mac_address: str | None = None
         self.discovered_tiles: list[dict[str, Any]] = []
+        self.cloud_tiles: dict[str, Any] = {}
+
+    async def _async_fetch_cloud_tiles(self) -> dict[str, Any]:
+        """Fetch the current Tile list from the cloud.
+
+        The hub entry's stored list is only a snapshot from hub creation, so
+        Tiles added to the account later would be missing. Falls back to the
+        stored list if the cloud is unreachable.
+        """
+        hub_entry = self._get_entry()
+        try:
+            result = await validate_tile_credentials(
+                self.hass, hub_entry.data["email"], hub_entry.data["password"]
+            )
+            return result["tiles"]
+        except HomeAssistantError as e:
+            _LOGGER.warning(
+                "Failed to refresh Tile list from cloud, using stored list: %s", e
+            )
+            return hub_entry.data.get("tiles", {})
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         """Choose between auto-discover and manual entry."""
         if user_input is not None:
+            self.cloud_tiles = await self._async_fetch_cloud_tiles()
             if user_input["add_method"] == "discover":
                 return await self.async_step_discover()
             else:
@@ -398,15 +473,12 @@ class DeviceSubentryFlowHandler(ConfigSubentryFlow):
             )
 
         # Perform the scan
-        hub_entry = self._get_entry()
-        cloud_tiles = hub_entry.data.get("tiles", {})
-
-        if not cloud_tiles:
+        if not self.cloud_tiles:
             return self.async_abort(reason="no_devices")
 
         existing_macs = self._get_existing_macs()
         self.discovered_tiles = await _async_discover_tiles(
-            self.hass, cloud_tiles, existing_macs
+            self.hass, self.cloud_tiles, existing_macs
         )
 
         if not self.discovered_tiles:
@@ -437,10 +509,7 @@ class DeviceSubentryFlowHandler(ConfigSubentryFlow):
                 if len(ble_mac) != 12 or not all(c in "0123456789ABCDEFabcdef" for c in ble_mac):
                     raise InvalidAuth("Invalid BLE MAC address format")
 
-                hub_entry = self._get_entry()
-                tiles = hub_entry.data.get("tiles", {})
-
-                if not tiles:
+                if not self.cloud_tiles:
                     raise NoDevicesFound("No Tile devices available from hub")
 
                 self.ble_mac_address = user_input["ble_mac_address"].upper()
@@ -466,11 +535,8 @@ class DeviceSubentryFlowHandler(ConfigSubentryFlow):
     ) -> SubentryFlowResult:
         """Select which Tile device this MAC corresponds to."""
         if user_input is None:
-            hub_entry = self._get_entry()
-            tiles = hub_entry.data.get("tiles", {})
-
             device_options = {}
-            for tile_id, tile_data in tiles.items():
+            for tile_id, tile_data in self.cloud_tiles.items():
                 display_name = f"{tile_data['name']} (API: {tile_data['api_mac']})"
                 device_options[tile_id] = display_name
 
@@ -486,8 +552,7 @@ class DeviceSubentryFlowHandler(ConfigSubentryFlow):
 
         # Create the subentry
         tile_id = user_input["tile_id"]
-        hub_entry = self._get_entry()
-        tile_data = hub_entry.data["tiles"][tile_id]
+        tile_data = self.cloud_tiles[tile_id]
 
         device_name = tile_data["name"]
 
